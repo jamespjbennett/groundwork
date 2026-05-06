@@ -1,0 +1,31 @@
+{
+  "name": "groundwork",
+  "displayName": "Groundwork",
+  "description": "Passively explains new concepts as you write code",
+  "version": "0.0.1",
+  "publisher": "groundwork",
+  "engines": { "vscode": "^1.89.0" },
+  "categories": ["Education"],
+  "activationEvents": ["onLanguage:python"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": []
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build-webview": "esbuild webview/index.tsx --bundle --outfile=out/webview.js --external:vscode"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/vscode": "^1.89.0",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  }
+}
