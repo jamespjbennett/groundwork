@@ -56,12 +56,12 @@ Format your response as JSON with keys "explanation" and "challenge_question". N
 
     try:
         message = await _client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
     except anthropic.APIError as e:
-        raise ExplainerError("Explanation model returned an API error") from e
+        raise ExplainerError(f"Anthropic API error ({type(e).__name__}): {e}") from e
     except httpx.HTTPError as e:
         raise ExplainerError("Could not reach the explanation model (network error)") from e
 

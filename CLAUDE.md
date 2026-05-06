@@ -312,7 +312,7 @@ npm install
 | Knowledge store | SQLite | Local, zero infra, sufficient for single-user MVP |
 | Extension language | TypeScript | Only real option — VS Code API is typed TS |
 | Webview UI | React | Familiar, works well in VS Code webview context |
-| Claude model | claude-sonnet-4-20250514 | Best balance of speed and explanation quality |
+| Claude model | claude-sonnet-4-6 | Best balance of speed and explanation quality |
 | MVP scope | API + extension only | Proves the loop without over-engineering |
 
 ---
