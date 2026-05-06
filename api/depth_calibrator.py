@@ -1,6 +1,9 @@
-def calibrate_depth(graph_state: dict) -> str:
-    total = graph_state.get("total_seen", 0)
-    avg_conf = graph_state.get("avg_confidence", 0.0)
+from graph_state import GraphState
+
+
+def calibrate_depth(state: GraphState) -> str:
+    total = state.total_seen
+    avg_conf = state.avg_confidence
 
     if total < 10 or avg_conf < 0.3:
         return "beginner"

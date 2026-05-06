@@ -1,11 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Literal
 
-from concept_extractor import extract_concepts
+from analyse_workflow import analyse_submission
+from explainer import ExplainerError
 from knowledge_graph import KnowledgeGraph
-from explainer import explain
 
 app = FastAPI(title="Groundwork API")
 
@@ -37,24 +37,10 @@ async def startup():
 
 @app.post("/analyse")
 async def analyse(req: AnalyseRequest):
-    concepts = extract_concepts(req.code)
-    novel = [c for c in concepts if await db.is_novel(c)]
-
-    if not novel:
-        return {"skipped": True, "reason": "already_known", "concepts": concepts}
-
-    concept = novel[0]
-    result = await explain(concept, req.code, await db.get_graph_state())
-    await db.upsert(concept, seen=True)
-
-    return {
-        "skipped": False,
-        "concepts": concepts,
-        "novel_concept": concept,
-        "explanation": result["explanation"],
-        "challenge_question": result["challenge_question"],
-        "confidence_before": await db.get_confidence(concept),
-    }
+    try:
+        return await analyse_submission(req.code, db, req.origin)
+    except ExplainerError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 @app.post("/respond")
