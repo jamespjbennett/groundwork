@@ -17,6 +17,7 @@ As an engineer, I'm increasingly falling into the trap of generating reems of co
 | Path | Role |
 |------|------|
 | `api/` | FastAPI app — all API logic, SQLite store, concept extraction, explainer |
+| `web/` | React + Vite UI — dev server proxies `/api/*` → `:8000` |
 | `extension/` | VS Code / Cursor extension — sends diffs to the API on every save (and on large AI-generated edits) |
 | `cli/` | Typer CLI — HTTP client for the same API, useful post-session or in CI |
 
@@ -24,9 +25,38 @@ As an engineer, I'm increasingly falling into the trap of generating reems of co
 
 ## Prerequisites
 
-- **Python 3.11+**
+- **Python 3.10+** (3.11+ if you install the CLI as a packaged project from `cli/pyproject.toml`)
 - **Anthropic API key** (`ANTHROPIC_API_KEY`)
-- **Node.js** (only for the extension)
+- **Node.js** (extension + web UI dev server)
+
+---
+
+## Quick setup (macOS / Linux)
+
+From the **repository root**:
+
+```bash
+make setup       # venv + pip, api/.env prompt, extension (npm install + compile), web (npm install)
+make start       # API only — background uvicorn on :8000
+make start-web   # Vite on :3000 (expects API on :8000 for /api/* proxy)
+make start-all   # API + web
+make stop        # stops API + web (any PID files from our scripts)
+make status      # PIDs + quick HTTP checks on :8000 and :3000
+make logs        # API log   |  make logs-web — web log
+```
+
+Underlying scripts: `scripts/setup.sh`, `start.sh`, `start-web.sh`, `stop.sh`.
+
+**Windows:** use Git Bash or WSL with the same commands, or follow the manual sections below.
+
+#### What this does *not* start
+
+| Piece | Why | What to do |
+|-------|-----|------------|
+| **Extension** | Editors don’t allow shell scripts to “inject” an extension. | Open the `extension/` folder in Cursor/VS Code and press **F5** (Extension Development Host), or build a `.vsix` with `npx @vscode/vsce package` and install it via **Extensions → Install from VSIX**. |
+| **`make start`** | Only the **Python API**. | Use **`make start-web`** or **`make start-all`** for the browser UI at [http://127.0.0.1:3000](http://127.0.0.1:3000). |
+
+The extension talks to **`http://localhost:8000`** directly; the web app uses **relative `/api/...`** so it works through Vite’s proxy without CORS issues.
 
 ---
 
@@ -146,6 +176,7 @@ npm run compile
 
 ## Todo
 
+- Automate the setup - currently super clunky (manually running cursor extension, manually running python api and frontend web server)
 - Currently this only works with VScode/Cursor. Want to extend htis to CLI level for use with claude code and possibly codex if possible (unfamiliar with codex)
 - Expand to all programming languages and architectural principles (limited to python now)
 - Integrate different LLM apis

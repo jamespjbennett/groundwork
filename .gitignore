@@ -4,6 +4,10 @@ __pycache__/
 venv/
 .env
 api/db/groundwork.db
+api/.groundwork-server.pid
+api/.groundwork-server.log
+web/.groundwork-web.pid
+web/.groundwork-web.log
 
 # Node
 node_modules/
