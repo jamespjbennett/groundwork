@@ -6,11 +6,19 @@ All the intelligence — concept extraction, knowledge tracking, Claude promptin
 
 ---
 
-## What happens when you save a file
+## What triggers an analysis
 
-1. **`extension.ts`** is the entry point. It registers a single listener: `onDidSaveTextDocument`. When VS Code fires that event for a Python file, everything else follows.
+There are two triggers, both in `extension.ts`:
 
-2. **`analyser.ts`** is called first. It compares the current file content against what it saw last time. If nothing changed, it stops early. If something changed, it works out whether the change looks like a paste (more than 5 lines appeared at once) or was typed incrementally, then POSTs the full file contents to `POST /analyse` on the local API. The `origin` field (`"typed"` or `"ai_generated"`) goes with the request so the API can weight pasted code higher — code you didn't write yourself is more likely to contain things you don't understand.
+**Manual save** (`onDidSaveTextDocument`) — fires when you hit Cmd+S. Always runs an analysis if the file content has changed.
+
+**AI agent write** (`onDidChangeTextDocument`) — fires whenever the document changes. Most of those events are single keystrokes and are ignored. When more than 5 lines appear in a single change — the signature of an AI-generated block — the extension starts a 1.5 second debounce timer. If no further large edits arrive in that window, it runs an analysis. This is what catches Cursor's agent writing code when you accept its output, without requiring a manual save.
+
+Both paths funnel into the same `trigger()` function.
+
+## What happens next
+
+1. **`analyser.ts`** is called. It compares the current file content against what it saw last time. If nothing changed, it stops early. If something changed, it works out whether the change looks like a paste (more than 5 lines appeared at once) or was typed incrementally, then POSTs the full file contents to `POST /analyse` on the local API. The `origin` field (`"typed"` or `"ai_generated"`) goes with the request so the API can weight pasted code higher — code you didn't write yourself is more likely to contain things you don't understand.
 
 3. The API response either says `skipped: true` (the concept is already known) or carries a `novel_concept`, `explanation`, and `challenge_question`. If skipped, the extension stops. If not, control passes to the two render surfaces.
 

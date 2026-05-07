@@ -17,6 +17,8 @@ _DEPTH_INSTRUCTIONS = {
 }
 
 
+
+
 class ExplainerError(RuntimeError):
     """Raised when no structured explanation can be produced (API, empty output, or invalid JSON)."""
 
