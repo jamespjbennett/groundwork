@@ -147,6 +147,9 @@ npm run compile
 ## Todo
 
 - Currently this only works with VScode/Cursor. Want to extend htis to CLI level for use with claude code and possibly codex if possible (unfamiliar with codex)
+- Expand to all programming languages and architectural principles (limited to python now)
+- Integrate different LLM apis
+
 
 ## License
 
