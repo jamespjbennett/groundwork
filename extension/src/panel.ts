@@ -1,14 +1,13 @@
 import * as vscode from "vscode";
-import * as path from "path";
+import { AnalyseResult } from "./types";
 
 const API_BASE = "http://localhost:8000";
 
 export class GroundworkPanel {
   static currentPanel: GroundworkPanel | undefined;
   private readonly _panel: vscode.WebviewPanel;
-  private readonly _extensionUri: vscode.Uri;
 
-  static createOrShow(extensionUri: vscode.Uri, result: any) {
+  static createOrShow(extensionUri: vscode.Uri, result: AnalyseResult) {
     const column = vscode.ViewColumn.Beside;
 
     if (GroundworkPanel.currentPanel) {
@@ -24,16 +23,11 @@ export class GroundworkPanel {
       { enableScripts: true, localResourceRoots: [extensionUri] }
     );
 
-    GroundworkPanel.currentPanel = new GroundworkPanel(panel, extensionUri, result);
+    GroundworkPanel.currentPanel = new GroundworkPanel(panel, result);
   }
 
-  private constructor(
-    panel: vscode.WebviewPanel,
-    extensionUri: vscode.Uri,
-    result: any
-  ) {
+  private constructor(panel: vscode.WebviewPanel, result: AnalyseResult) {
     this._panel = panel;
-    this._extensionUri = extensionUri;
     this._update(result);
 
     this._panel.onDidDispose(() => {
@@ -45,25 +39,27 @@ export class GroundworkPanel {
         await fetch(`${API_BASE}/respond`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            concept_id: msg.conceptId,
-            understood: msg.understood,
-          }),
+          body: JSON.stringify({ concept_id: msg.conceptId, understood: msg.understood }),
         });
         this._panel.webview.postMessage({ type: "responded" });
       }
     });
   }
 
-  private _update(result: any) {
+  private _update(result: AnalyseResult) {
     this._panel.webview.html = this._getHtml(result);
   }
 
-  private _getHtml(result: any): string {
+  private _getHtml(result: AnalyseResult): string {
+    const concept = esc(result.novel_concept);
+    const explanation = esc(result.explanation);
+    const question = esc(result.challenge_question);
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
   <style>
     body { font-family: var(--vscode-font-family); padding: 16px; color: var(--vscode-foreground); }
     h2 { margin-top: 0; font-size: 1rem; }
@@ -77,17 +73,18 @@ export class GroundworkPanel {
   </style>
 </head>
 <body>
-  <h2>New concept: <strong>${result.novel_concept}</strong></h2>
-  <div class="explanation">${result.explanation}</div>
-  <div class="question"><strong>Challenge:</strong> ${result.challenge_question}</div>
+  <h2>New concept: <strong>${concept}</strong></h2>
+  <div class="explanation">${explanation}</div>
+  <div class="question"><strong>Challenge:</strong> ${question}</div>
   <div class="actions" id="actions">
     <button class="got-it" onclick="respond(true)">Got it</button>
     <button class="not-quite" onclick="respond(false)">Not quite</button>
   </div>
   <script>
     const vscode = acquireVsCodeApi();
+    const conceptId = ${JSON.stringify(result.novel_concept)};
     function respond(understood) {
-      vscode.postMessage({ type: 'respond', conceptId: '${result.novel_concept}', understood });
+      vscode.postMessage({ type: 'respond', conceptId, understood });
     }
     window.addEventListener('message', e => {
       if (e.data.type === 'responded') {
@@ -98,4 +95,12 @@ export class GroundworkPanel {
 </body>
 </html>`;
   }
+}
+
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

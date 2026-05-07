@@ -13,19 +13,11 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "build-webview": "esbuild webview/index.tsx --bundle --outfile=out/webview.js --external:vscode"
+    "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/react": "^18.0.0",
-    "@types/react-dom": "^18.0.0",
     "@types/vscode": "^1.89.0",
-    "esbuild": "^0.21.0",
     "typescript": "^5.4.0"
-  },
-  "dependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
   }
 }
