@@ -176,12 +176,9 @@ npm run compile
 
 ## Todo
 
-- Automate the setup - currently super clunky (manually running cursor extension, manually running python api and frontend web server)
-- Currently this only works with VScode/Cursor. Want to extend htis to CLI level for use with claude code and possibly codex if possible (unfamiliar with codex)
+- Automate the setup - the server setup and running is done with a makefile, but the extension is still fiddly to run. Ideally you could pull this down and have it all run in one magic command.
+- Currently this only works with VScode/Cursor. Want to extend this to CLI level for use with claude code and possibly codex (unfamiliar with codex)
 - Expand to all programming languages and architectural principles (limited to python now)
 - Integrate different LLM apis
 
 
-## License
-
-Not specified. Add a `LICENSE` file if you publish the project.
