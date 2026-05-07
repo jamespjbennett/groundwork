@@ -27,6 +27,7 @@ class _Row:
             "confidence": self.confidence,
             "seen_count": self.seen_count,
             "last_seen": self.last_seen,
+            "depth_level": self.depth_level,
         }
 
 

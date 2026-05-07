@@ -135,12 +135,14 @@ class SqliteKnowledgeStore:
             )
             await db.commit()
             async with db.execute(
-                "SELECT id, name, confidence, seen_count, last_seen FROM concepts WHERE id = ?",
+                "SELECT id, name, confidence, seen_count, last_seen, depth_level FROM concepts WHERE id = ?",
                 (concept_id,),
             ) as cursor:
                 row = await cursor.fetchone()
                 if row:
-                    return dict(zip(["id", "name", "confidence", "seen_count", "last_seen"], row))
+                    return dict(zip(
+                        ["id", "name", "confidence", "seen_count", "last_seen", "depth_level"], row
+                    ))
                 return {}
 
     async def all(self) -> list[dict]:

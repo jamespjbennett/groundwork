@@ -14,58 +14,148 @@ _STUB = ExplanationResult(
 _DECORATOR_CODE = "@property\ndef x(self): pass"
 
 
+def _kwargs(**overrides):
+    base = {
+        "code": _DECORATOR_CODE,
+        "diff": "@@ -0,0 +1,2 @@\n+@property\n+def x(self): pass",
+        "file_path": "api/main.py",
+        "session_id": "sess-test",
+    }
+    base.update(overrides)
+    return base
+
+
 @pytest.fixture
 def store():
     return InMemoryKnowledgeStore()
 
 
-async def test_novel_concept_returns_full_result(store):
+# --- novel concept happy path ---
+
+async def test_novel_concept_returns_slim_shape(store):
     with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
-        result = await analyse_submission(_DECORATOR_CODE, store)
+        result = await analyse_submission(**_kwargs(), knowledge=store)
 
     assert result["skipped"] is False
-    assert "decorator" in result["concepts"]
-    assert result["novel_concept"] == "decorator"
-    assert result["explanation"] == _STUB.explanation
-    assert result["challenge_question"] == _STUB.challenge_question
+    assert result["entry_id"]
+    assert result["summary"] == _STUB.summary
+    assert {"id", "name", "is_novel"} <= set(result["concepts"][0].keys())
+    # explanation/challenge are stored in the DB, not echoed in the response
+    assert "explanation" not in result
+    assert "challenge_question" not in result
 
 
-async def test_no_concepts_returns_skipped(store):
-    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB) as mock_explain:
-        result = await analyse_submission("x = 1 + 2", store)
+async def test_novel_concept_persists_full_entry(store):
+    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
+        result = await analyse_submission(**_kwargs(), knowledge=store)
+
+    entry = await store.get_entry(result["entry_id"])
+    assert entry["session_id"] == "sess-test"
+    assert entry["file_path"] == "api/main.py"
+    assert entry["origin"] == "typed"
+    assert entry["language"] == "python"
+    assert entry["diff"].startswith("@@")
+    assert entry["code_snippet"] == _DECORATOR_CODE
+    assert entry["summary"] == _STUB.summary
+    assert entry["explanation"] == _STUB.explanation
+    assert entry["challenge_q"] == _STUB.challenge_question
+
+
+async def test_novel_concept_marks_concept_as_novel_in_join(store):
+    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
+        result = await analyse_submission(**_kwargs(), knowledge=store)
+
+    by_id = {c["id"]: c for c in result["concepts"]}
+    assert by_id["decorator"]["is_novel"] is True
+
+
+async def test_explain_called_with_file_path(store):
+    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB) as mock:
+        await analyse_submission(**_kwargs(file_path="path/x.py"), knowledge=store)
+    _, kwargs = mock.call_args
+    assert kwargs["file_path"] == "path/x.py"
+
+
+# --- skip paths ---
+
+async def test_no_concepts_returns_skipped_with_reason(store):
+    with patch("analyse_workflow.explain", new_callable=AsyncMock) as mock_explain:
+        result = await analyse_submission(**_kwargs(code="x = 1 + 2"), knowledge=store)
 
     assert result["skipped"] is True
-    assert result["reason"] == "already_known"
+    assert result["reason"] == "no_concepts"
+    assert result["concepts"] == []
     mock_explain.assert_not_called()
 
 
-async def test_already_known_concept_returns_skipped(store):
-    # Push decorator confidence above the typed cap (0.8)
+async def test_already_known_concepts_returns_skipped(store):
     store._rows["decorator"] = _Row(
         id="decorator", name="decorator", confidence=0.9, seen_count=5, last_seen="2026-01-01"
     )
-    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB) as mock_explain:
-        result = await analyse_submission(_DECORATOR_CODE, store)
+    with patch("analyse_workflow.explain", new_callable=AsyncMock) as mock_explain:
+        result = await analyse_submission(**_kwargs(), knowledge=store)
 
     assert result["skipped"] is True
+    assert result["reason"] == "already_known"
+    assert any(c["id"] == "decorator" for c in result["concepts"])
     mock_explain.assert_not_called()
 
 
+async def test_skip_path_does_not_record_entry(store):
+    store._rows["decorator"] = _Row(
+        id="decorator", name="decorator", confidence=0.9, seen_count=5, last_seen="2026-01-01"
+    )
+    with patch("analyse_workflow.explain", new_callable=AsyncMock):
+        await analyse_submission(**_kwargs(), knowledge=store)
+    assert await store.get_feed() == []
+
+
+# --- mixed novel + reinforced ---
+
+async def test_mixed_concepts_flag_correctly_in_entry(store):
+    store._rows["lambda"] = _Row(
+        id="lambda", name="lambda", confidence=0.9, seen_count=5, last_seen="2026-01-01"
+    )
+    code_with_both = "@property\ndef f(): return lambda x: x"
+
+    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
+        result = await analyse_submission(**_kwargs(code=code_with_both), knowledge=store)
+
+    by_id = {c["id"]: c for c in result["concepts"]}
+    assert by_id["decorator"]["is_novel"] is True
+    assert by_id["lambda"]["is_novel"] is False
+
+
+async def test_reinforced_concepts_have_seen_count_incremented(store):
+    store._rows["lambda"] = _Row(
+        id="lambda", name="lambda", confidence=0.9, seen_count=5, last_seen="2026-01-01"
+    )
+    code_with_both = "@property\ndef f(): return lambda x: x"
+
+    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
+        await analyse_submission(**_kwargs(code=code_with_both), knowledge=store)
+
+    assert store._rows["lambda"].seen_count == 6
+
+
+# --- origin handling ---
+
 async def test_ai_generated_origin_uses_higher_cap(store):
-    # Confidence 0.85: above typed cap (0.8) but below ai_generated cap (0.95)
     store._rows["decorator"] = _Row(
         id="decorator", name="decorator", confidence=0.85, seen_count=3, last_seen="2026-01-01"
     )
     with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
-        typed_result = await analyse_submission(_DECORATOR_CODE, store, origin="typed")
+        typed = await analyse_submission(**_kwargs(origin="typed"), knowledge=store)
 
-    store._rows["decorator"].confidence = 0.85  # reset for second call
+    store._rows["decorator"].confidence = 0.85
     with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
-        ai_result = await analyse_submission(_DECORATOR_CODE, store, origin="ai_generated")
+        ai = await analyse_submission(**_kwargs(origin="ai_generated"), knowledge=store)
 
-    assert typed_result["skipped"] is True
-    assert ai_result["skipped"] is False
+    assert typed["skipped"] is True
+    assert ai["skipped"] is False
 
+
+# --- error propagation ---
 
 async def test_explainer_error_propagates(store):
     with patch(
@@ -74,12 +164,15 @@ async def test_explainer_error_propagates(store):
         side_effect=ExplainerError("API down"),
     ):
         with pytest.raises(ExplainerError, match="API down"):
-            await analyse_submission(_DECORATOR_CODE, store)
+            await analyse_submission(**_kwargs(), knowledge=store)
 
 
-async def test_upsert_called_after_successful_explain(store):
-    with patch("analyse_workflow.explain", new_callable=AsyncMock, return_value=_STUB):
-        await analyse_submission(_DECORATOR_CODE, store)
-
-    # concept should now be in the store
-    assert await store.get_confidence("decorator") == pytest.approx(0.3)
+async def test_explainer_error_does_not_record_entry(store):
+    with patch(
+        "analyse_workflow.explain",
+        new_callable=AsyncMock,
+        side_effect=ExplainerError("API down"),
+    ):
+        with pytest.raises(ExplainerError):
+            await analyse_submission(**_kwargs(), knowledge=store)
+    assert await store.get_feed() == []
