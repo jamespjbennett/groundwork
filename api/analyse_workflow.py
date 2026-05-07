@@ -14,11 +14,34 @@ extension to confirm success, with full detail living in the entries
 table for the web UI to fetch.
 """
 
+import asyncio
 from typing import Literal
 
 from concept_extractor import extract_concepts
 from explainer import explain
 from knowledge_store import KnowledgeStore, novelty_cap
+
+
+def _concept_cards(concepts: list[str], novel_ids: set[str]) -> list[dict]:
+    """Slim concept rows for /analyse; ids sorted like entry_concepts + concepts JOIN."""
+    return [
+        {"id": cid, "name": cid, "is_novel": cid in novel_ids}
+        for cid in sorted(concepts)
+    ]
+
+
+async def _novel_concept_ids(
+    concepts: list[str],
+    knowledge: KnowledgeStore,
+    *,
+    cap: float,
+) -> set[str]:
+    if not concepts:
+        return set()
+    flags = await asyncio.gather(
+        *[knowledge.is_novel(c, novel_if_confidence_below=cap) for c in concepts]
+    )
+    return {c for c, novel in zip(concepts, flags, strict=True) if novel}
 
 
 async def analyse_submission(
@@ -33,19 +56,13 @@ async def analyse_submission(
 ) -> dict:
     concepts = extract_concepts(code)
     cap = novelty_cap(origin)
-
-    novel_set: set[str] = set()
-    for c in concepts:
-        if await knowledge.is_novel(c, novel_if_confidence_below=cap):
-            novel_set.add(c)
+    novel_set = await _novel_concept_ids(concepts, knowledge, cap=cap)
 
     if not novel_set:
         return {
             "skipped": True,
             "reason": "already_known" if concepts else "no_concepts",
-            "concepts": [
-                {"id": c, "name": c, "is_novel": False} for c in concepts
-            ],
+            "concepts": _concept_cards(concepts, set()),
         }
 
     focus = next(c for c in concepts if c in novel_set)
@@ -71,10 +88,9 @@ async def analyse_submission(
         concepts=[(c, c in novel_set) for c in concepts],
     )
 
-    entry = await knowledge.get_entry(entry_id)
     return {
         "skipped": False,
         "entry_id": entry_id,
         "summary": result.summary,
-        "concepts": entry["concepts"] if entry else [],
+        "concepts": _concept_cards(concepts, novel_set),
     }
