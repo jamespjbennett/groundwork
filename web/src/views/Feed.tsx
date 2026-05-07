@@ -5,26 +5,15 @@ export function Feed() {
   const { entries, error, loading } = useFeed();
 
   if (loading && entries === null) {
-    return <p style={{ opacity: 0.6 }}>Loading…</p>;
+    return <p className="muted">Loading…</p>;
   }
 
   return (
     <div>
-      {error && (
-        <p
-          style={{
-            color: "#ff8a8a",
-            fontSize: "0.8rem",
-            marginBottom: 16,
-            opacity: 0.85,
-          }}
-        >
-          {error}
-        </p>
-      )}
+      {error && <div className="error-banner">{error}</div>}
 
-      {entries !== null && entries.length === 0 && (
-        <p style={{ opacity: 0.6 }}>
+      {entries !== null && entries.length === 0 && !error && (
+        <p className="muted">
           No entries yet — save a Python file in your editor.
         </p>
       )}
