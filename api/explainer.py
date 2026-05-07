@@ -17,49 +17,80 @@ _DEPTH_INSTRUCTIONS = {
 }
 
 
-
-
 class ExplainerError(RuntimeError):
     """Raised when no structured explanation can be produced (API, empty output, or invalid JSON)."""
 
 
 @dataclass(frozen=True)
 class ExplanationResult:
+    summary: str
     explanation: str
     challenge_question: str
 
 
 async def explain(
-    concept_id: str, code_snippet: str, graph_state: GraphState
+    concept_id: str,
+    code_snippet: str,
+    graph_state: GraphState,
+    *,
+    file_path: str | None = None,
 ) -> ExplanationResult:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise ExplainerError("ANTHROPIC_API_KEY is not set")
 
     depth = calibrate_depth(graph_state)
-    depth_instruction = _DEPTH_INSTRUCTIONS[depth]
+    prompt = _build_prompt(concept_id, code_snippet, file_path, depth)
 
-    prompt = f"""You are a coding tutor embedded in a developer's editor.
+    text = await _call_model(prompt)
+    try:
+        return _parse_model_json(text)
+    except ExplainerError:
+        # One retry with a sharper formatting reminder. Model sometimes wraps
+        # the JSON in prose or fences despite instructions.
+        retry_prompt = prompt + (
+            "\n\nIMPORTANT: Return ONLY a JSON object with exactly these "
+            'string keys: "summary", "explanation", "challenge_q". '
+            "No prose, no markdown fences, no commentary."
+        )
+        text = await _call_model(retry_prompt)
+        return _parse_model_json(text)
 
-The developer just wrote code containing the concept: **{concept_id}**.
 
-Relevant code snippet:
+def _build_prompt(
+    concept_id: str,
+    code_snippet: str,
+    file_path: str | None,
+    depth: str,
+) -> str:
+    location = f" in `{file_path}`" if file_path else ""
+    return f"""You are a coding tutor reviewing a developer's recent code change.
+
+The developer just wrote code{location} that uses the concept: **{concept_id}**.
+
+The code:
 ```python
-{code_snippet[:1000]}
+{code_snippet[:2000]}
 ```
 
 Depth level: {depth}
-Instruction: {depth_instruction}
+Style: {_DEPTH_INSTRUCTIONS[depth]}
 
-Write a response with exactly two parts:
-1. A 2–3 sentence explanation of this concept as it appears in the code above.
-2. One challenge question that tests whether the developer understands it.
+Return a JSON object with three string keys:
 
-Format your response as JSON with keys "explanation" and "challenge_question". No other keys."""
+1. "summary" — One sentence describing what THIS specific code change accomplishes. Not what {concept_id} is in general — what THIS code does. Like a commit message: "Added a class to centralise database connection handling".
 
+2. "explanation" — Two to four short paragraphs explaining the {concept_id} concept *as it appears in this code*. Reference actual variable names, function names, and patterns from the snippet above. Explain why {concept_id} was used here and what it achieves in THIS code, not in the abstract.
+
+3. "challenge_q" — One specific question about the code just written. The answer must be verifiable from the snippet. Avoid generic questions like "what is a {concept_id}?".
+
+Return only the JSON object. No commentary, no markdown fences."""
+
+
+async def _call_model(prompt: str) -> str:
     try:
         message = await _client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=512,
+            max_tokens=1500,
             messages=[{"role": "user", "content": prompt}],
         )
     except anthropic.APIError as e:
@@ -67,8 +98,7 @@ Format your response as JSON with keys "explanation" and "challenge_question". N
     except httpx.HTTPError as e:
         raise ExplainerError("Could not reach the explanation model (network error)") from e
 
-    text = _message_to_text(message)
-    return _parse_model_json(text)
+    return _message_to_text(message)
 
 
 def _message_to_text(message: object) -> str:
@@ -113,17 +143,21 @@ def _parse_model_json(text: str) -> ExplanationResult:
     if not isinstance(data, dict):
         raise ExplainerError("Model JSON was not an object")
 
+    summary = data.get("summary")
     explanation = data.get("explanation")
-    challenge_question = data.get("challenge_question")
-    if not isinstance(explanation, str) or not isinstance(challenge_question, str):
-        raise ExplainerError(
-            'Model JSON must include string keys "explanation" and "challenge_question"'
-        )
-    explanation = explanation.strip()
-    challenge_question = challenge_question.strip()
-    if not explanation or not challenge_question:
-        raise ExplainerError("Model returned an empty explanation or challenge question")
+    # Prefer the new spec key; fall back to the legacy key if the model returns it.
+    challenge = data.get("challenge_q")
+    if challenge is None:
+        challenge = data.get("challenge_question")
+
+    for name, value in (("summary", summary), ("explanation", explanation), ("challenge_q", challenge)):
+        if not isinstance(value, str):
+            raise ExplainerError(f"Model JSON must include a string field '{name}'")
+        if not value.strip():
+            raise ExplainerError(f"Model returned an empty '{name}'")
 
     return ExplanationResult(
-        explanation=explanation, challenge_question=challenge_question
+        summary=summary.strip(),
+        explanation=explanation.strip(),
+        challenge_question=challenge.strip(),
     )

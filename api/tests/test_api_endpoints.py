@@ -5,6 +5,7 @@ from explainer import ExplainerError, ExplanationResult
 from memory_knowledge_store import InMemoryKnowledgeStore, _Row
 
 _STUB = ExplanationResult(
+    summary="Wrapped a method with @property.",
     explanation="A decorator wraps a function.",
     challenge_question="What does @property do?",
 )

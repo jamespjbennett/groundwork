@@ -33,6 +33,31 @@ class KnowledgeStore(Protocol):
     async def get_graph_state(self) -> GraphState: ...
     async def session_digest(self) -> dict: ...
 
+    # Entries (v0.2): one row per analysed code change, joined to concepts.
+    async def record_entry(
+        self,
+        *,
+        session_id: str,
+        file_path: str,
+        language: str,
+        origin: str,
+        diff: str,
+        code_snippet: str,
+        summary: str,
+        explanation: str,
+        challenge_q: str | None,
+        concepts: list[tuple[str, bool]],
+    ) -> str: ...
+    async def get_entry(self, entry_id: str) -> dict | None: ...
+    async def get_feed(
+        self,
+        *,
+        session_id: str | None = None,
+        concept_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]: ...
+    async def get_digest(self, date: str | None = None) -> dict: ...
+
 
 def graph_state_from_rows(rows: list[dict]) -> GraphState:
     return GraphState(tuple(ConceptRecord.from_store(r) for r in rows))
