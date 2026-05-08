@@ -1,8 +1,12 @@
 # Groundwork
 
+<img width="640" height="360" alt="groundword-mvp-demo" src="https://github.com/user-attachments/assets/f0800c68-cd1b-4a3f-81db-b0a5c17e2a93" />
+
+---
+
 Groundwork is a **local learning loop** for developers. As you write or paste code (pertinantly - code written by LLM's that you accept) it silently detects concepts in each change, checks what you already know, and — when something is still worth explaining — asks Claude for a short contextual explanation and a challenge question. 
 
-Currently limited to python as a starting point (as I am not familiar with python and want to learn as I go) - but intended future use case is to expand to all domains of development. Everything is stored locally; you query it whenever you want.
+Bit of a fun side project, but also intend to increase the usefulness of it and make it a more well rounded learning utility.
 
 Full design, roadmap, and vocabulary live in [CLAUDE.md](CLAUDE.md).
 
